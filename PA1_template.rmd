@@ -1,0 +1,135 @@
+---
+output:
+  html_document:
+    keep_md: yes
+---
+Activity Monitoring Evaluation
+========================================================================================
+
+Loading and pre-processing the data
+
+```{r}
+setwd("~/.")
+library(dplyr)
+library(lubridate)
+library(xtable)
+library(ggplot2)
+if(!file.exists("./ActivityData")){
+    file_url <- ("https://github.com/ALCrist/RepData_PeerAssessment1/blob/master/activity.zip?raw=true
+")    
+    dir.create("ActivityData", recursive=FALSE,showWarnings=TRUE)
+    download.file(file_url, destfile = "./ActivityData/activity.zip", mode="wb")
+    
+}
+path <- path.expand("~/ActivityData/activity.zip")
+activity <- read.csv(unzip(path),
+                       header = TRUE, stringsAsFactors=FALSE)
+```
+####  What is mean total number of steps taken per day?
+
+Calculate the total number of steps taken per day:
+```{r TotalSteps}
+TotalSteps <- summarize(group_by(activity,date),steps=sum(steps))
+```
+
+This is a histogram of the total number of steps taken each day:
+
+```{r HistTotalSteps}
+par(mar=c(4,4,2,1))
+hist(TotalSteps$steps, xlab="Steps", main="Total Steps Taken Per Day", col="blue")
+
+```
+
+
+
+
+Calculate the mean and median number of steps per day:
+```{r AvgSteps}
+MeanSteps <- as.data.frame(summarize(group_by(activity,Date=date), Mean=mean(steps), 
+                       Median=median(steps)))
+```
+
+This is the mean and median number of steps taken each day:
+```{r TabAvgSteps, results='asis', fig.align='center'}
+ms <- xtable(MeanSteps[which(!is.na(MeanSteps$Mean)),], digits=2)
+print(ms, type="html")
+
+```
+####  What is the average daily activity pattern?
+
+Calculate the mean number of steps per interval over all days:
+```{r DailyActivity}
+DailyActivity <- as.data.frame(summarize(group_by(activity, Interval=interval),Mean=mean(steps, na.rm=TRUE)))                           
+```
+
+This is a graph of the average daily activity:
+```{r DailyActivityPlot}
+
+par(mar=c(4,4,2,1))
+plot(DailyActivity$Interval,DailyActivity$Mean, type="l", col="blue",
+     main="Average Daily Activity Pattern",xlab="Interval",ylab="Avg. Steps")
+```
+
+Determine interval with maximum average number of steps:
+
+```{r MaxInterval}
+maxint <- DailyActivity[which(DailyActivity$Mean==max(DailyActivity$Mean)),"Interval"]
+
+```
+
+Interval **`r maxint`** on average has the maximum number of steps.
+
+
+####  Imputing missing values
+
+Replace missing steps value with mean steps for given interval.
+
+```{r NewActivitySet}
+na.activity <- activity[which(is.na(activity$steps)),]
+merged.na.activity <- merge(na.activity, DailyActivity, by.x="interval", by.y="Interval")
+merged.na.activity$steps <- merged.na.activity$Mean
+new.activity <- rbind(merged.na.activity[,c("interval","steps","date")],
+                      activity[which(!is.na(activity$steps)),])
+```
+
+**Imputing the mean steps for a given interval increased the frequency of 10,000 to 15,000 total steps taken by 8.**  
+
+
+This is a histogram of the total number of steps taken each day using updated data set:
+
+```{r HistNewTotalSteps}
+newTotalSteps <- summarize(group_by(new.activity,date),steps=sum(steps))
+
+par(mar=c(4,4,2,1))
+hist(newTotalSteps$steps, xlab="Steps", main="Total Steps Taken Per Day", col="blue")
+```
+
+**The median number of steps for days with imputed values is significantly higher than the median number of steps for those days with actual measures.**
+
+This is the mean and median number of steps taken each day using updated data set:
+```{r NewTabAvgSteps, results='asis', fig.align='center'}
+
+newMeanSteps <- as.data.frame(summarize(group_by(new.activity,Date=date), Mean=mean(steps), 
+                                     Median=median(steps)))
+newms <- xtable(newMeanSteps, digits=2)
+print(newms, type="html", methods=print.xtable)
+```
+
+####  Are there differences in activity parterns between weekdays and weekends?
+
+Calculate the mean number of steps for all weekday and weekend days:
+```{r }
+new.activity <- cbind(new.activity, day=wday(ymd(new.activity$date)))
+new.activity$factor <- as.factor(ifelse(new.activity$day %in% c(2:6),"Weekday","Weekend"))
+
+new.DailyActivity <- as.data.frame(summarize(group_by(new.activity, Interval=interval,DayType=factor),Mean=mean(steps, na.rm=TRUE)))                           
+```
+
+This is a graph of the average daily activity split between weekday and weekend days:
+```{r DailyActivityComp }
+p2 <-ggplot(new.DailyActivity, aes(Interval, Mean)) 
+p2 <- p2 + geom_line(col="blue") + facet_grid(DayType~.) +
+    xlab("Intervals") + ylab("Number of Steps") +
+    theme_bw() + labs(title = "Average Daily Activity") 
+print(p2)
+```
